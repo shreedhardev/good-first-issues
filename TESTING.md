@@ -66,8 +66,12 @@ Grouped in classes, one per component:
 
 The MCP tools, each against a dataset written to `tmp_path` and pointed at with
 `ISSUES_CSV`: `search_issues` with and without filters, `list_languages`,
-`list_repositories`, that the three tools are registered and described for the
-model, and the `__main__` block.
+`list_repositories`, `dataset_info`, that all four tools are registered and
+described for the model, and the `__main__` block. `load_dataset` is also
+covered without a local
+file: the published CSV is fetched through a mocked `requests.get` (never a
+real request), including cache hits, expiry, stale-cache fallback, and fetch
+errors.
 
 ### `app/tests/test_update_issues.py`
 

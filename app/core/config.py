@@ -23,6 +23,13 @@ HEADERS = {
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+PUBLISHED_DATASET_URL = (
+    'https://raw.githubusercontent.com/drkrillo/good-first-issues/'
+    'main/good_first_issues.csv'
+)
+DATASET_FETCH_TIMEOUT = 10
+DATASET_CACHE_TTL_SECONDS = 3600
+
 
 def get_template_path():
     return os.path.join(BASE_DIR, 'templates')
