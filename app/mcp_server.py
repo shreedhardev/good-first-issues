@@ -1,3 +1,4 @@
+import csv
 import logging
 import os
 import time
@@ -7,6 +8,7 @@ from mcp.server.mcpserver import MCPServer
 
 from app.core.config import (
     DATASET_CACHE_TTL_SECONDS,
+    DATASET_FETCH_BACKOFF_SECONDS,
     DATASET_FETCH_TIMEOUT,
     PUBLISHED_DATASET_URL,
     get_dataset_path,
@@ -30,6 +32,7 @@ mcp = MCPServer(
 _published_cache = {
     'issues': None,
     'fetched_at': 0.0,
+    'failed_at': 0.0,
 }
 
 _dataset_meta = {
@@ -49,7 +52,24 @@ def _fetch_published_dataset():
         timeout=DATASET_FETCH_TIMEOUT,
     )
     response.raise_for_status()
-    return DatasetManager.load_issues_from_text(response.text)
+    try:
+        issues = DatasetManager.load_issues_from_text(response.text)
+    except (KeyError, ValueError, csv.Error) as error:
+        raise DatasetError(
+            PUBLISHED_DATASET_URL,
+            reason=(
+                f"published dataset at {PUBLISHED_DATASET_URL} is malformed: "
+                f"{error}"
+            ),
+        ) from error
+
+    if not issues:
+        raise DatasetError(
+            PUBLISHED_DATASET_URL,
+            reason=f"published dataset at {PUBLISHED_DATASET_URL} is empty",
+        )
+
+    return issues
 
 
 def load_dataset():
@@ -57,9 +77,14 @@ def load_dataset():
     Returns the issues to search.
 
     Resolution order: ISSUES_CSV if set, then the local file if it is
-    there, then the published CSV. The published copy is cached so
-    tool calls do not fetch on every request. The source in use is
-    stored for dataset_info.
+    there, then the published CSV.
+
+    Local files (ISSUES_CSV or repo-root good_first_issues.csv) are
+    re-read on every call so that fresh pipeline runs are picked up
+    immediately without restarting the server. The published copy is
+    cached for an hour (with a 5-minute backoff on failed refetches)
+    to avoid redundant network requests. The source in use is stored
+    for dataset_info.
     """
     env_path = os.environ.get('ISSUES_CSV')
     if env_path:
@@ -78,11 +103,16 @@ def load_dataset():
     now = time.monotonic()
     cached = _published_cache['issues']
     fetched_at = _published_cache['fetched_at']
+    failed_at = _published_cache['failed_at']
     cache_is_fresh = (
         cached is not None
         and (now - fetched_at) < DATASET_CACHE_TTL_SECONDS
     )
-    if cache_is_fresh:
+    holding_off = (
+        cached is not None
+        and (now - failed_at) < DATASET_FETCH_BACKOFF_SECONDS
+    )
+    if cache_is_fresh or holding_off:
         logging.info(
             'Loading issues dataset from published cache (%s)',
             PUBLISHED_DATASET_URL,
@@ -92,7 +122,8 @@ def load_dataset():
 
     try:
         issues = _fetch_published_dataset()
-    except requests.RequestException as error:
+    except (requests.RequestException, DatasetError) as error:
+        _published_cache['failed_at'] = now
         if cached is not None:
             logging.warning(
                 'Fetch of published dataset failed (%s); using stale cache',
@@ -111,6 +142,7 @@ def load_dataset():
 
     _published_cache['issues'] = issues
     _published_cache['fetched_at'] = now
+    _published_cache['failed_at'] = 0.0
     logging.info(
         'Loading issues dataset from published file (%s)',
         PUBLISHED_DATASET_URL,

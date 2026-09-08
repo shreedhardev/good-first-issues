@@ -32,8 +32,9 @@ python -m app.update_issues --output good_first_issues.csv
 ```
 
 Otherwise it fetches the published CSV (cached for an hour, ten second
-timeout). Point it at a specific file with the `ISSUES_CSV` environment
-variable.
+timeout, with a 5-minute backoff on failed refetches). Point it at a
+specific file with the `ISSUES_CSV` environment variable.
+
 
 ## Running it
 

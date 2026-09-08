@@ -9,7 +9,11 @@ import requests
 from mcp.server.mcpserver import MCPServer
 
 from app import mcp_server
-from app.core.config import DATASET_CACHE_TTL_SECONDS, PUBLISHED_DATASET_URL
+from app.core.config import (
+    DATASET_CACHE_TTL_SECONDS,
+    DATASET_FETCH_BACKOFF_SECONDS,
+    PUBLISHED_DATASET_URL,
+)
 from app.core.custom_exceptions import DatasetError
 
 
@@ -35,11 +39,13 @@ def dataset_env(tmp_path, monkeypatch):
 def reset_published_cache():
     mcp_server._published_cache['issues'] = None
     mcp_server._published_cache['fetched_at'] = 0.0
+    mcp_server._published_cache['failed_at'] = 0.0
     mcp_server._dataset_meta['source'] = None
     mcp_server._dataset_meta['location'] = None
     yield
     mcp_server._published_cache['issues'] = None
     mcp_server._published_cache['fetched_at'] = 0.0
+    mcp_server._published_cache['failed_at'] = 0.0
     mcp_server._dataset_meta['source'] = None
     mcp_server._dataset_meta['location'] = None
 
@@ -199,6 +205,132 @@ class TestLoadDataset:
                 mcp_server.load_dataset()
 
         assert '404' in str(excinfo.value)
+
+    def test_load_dataset_errors_on_empty_body(self, tmp_path, monkeypatch):
+        missing = tmp_path / 'missing.csv'
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(mcp_server, 'get_dataset_path', lambda: str(missing))
+
+        with patch(
+            'app.mcp_server.requests.get',
+            return_value=_published_response(text=''),
+        ):
+            with pytest.raises(DatasetError) as excinfo:
+                mcp_server.load_dataset()
+
+        message = str(excinfo.value)
+        assert str(missing) in message
+        assert PUBLISHED_DATASET_URL in message
+        assert 'empty' in message
+
+    def test_load_dataset_errors_on_malformed_html_body(
+        self, tmp_path, monkeypatch
+    ):
+        missing = tmp_path / 'missing.csv'
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(mcp_server, 'get_dataset_path', lambda: str(missing))
+
+        with patch(
+            'app.mcp_server.requests.get',
+            return_value=_published_response(
+                text='<!DOCTYPE html>\n<html>\n<body>Not Found</body>\n</html>'
+            ),
+        ):
+            with pytest.raises(DatasetError) as excinfo:
+                mcp_server.load_dataset()
+
+        message = str(excinfo.value)
+        assert str(missing) in message
+        assert PUBLISHED_DATASET_URL in message
+        assert 'malformed' in message
+
+    def test_load_dataset_uses_stale_cache_on_malformed_refetch(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path', lambda: str(tmp_path / 'missing.csv')
+        )
+        current = {'t': 1000.0}
+        monkeypatch.setattr(mcp_server.time, 'monotonic', lambda: current['t'])
+
+        with patch(
+            'app.mcp_server.requests.get',
+            side_effect=[
+                _published_response(),
+                _published_response(
+                    text='<!DOCTYPE html>\n<html>\n404 Not Found\n</html>'
+                ),
+            ],
+        ) as mock_get:
+            first = mcp_server.load_dataset()
+            current['t'] = 1000.0 + DATASET_CACHE_TTL_SECONDS + 1
+            second = mcp_server.load_dataset()
+
+        assert mock_get.call_count == 2
+        assert second[0]['repo'] == first[0]['repo']
+        assert mcp_server._published_cache['issues'] == first
+
+    def test_load_dataset_uses_stale_cache_on_empty_refetch(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path', lambda: str(tmp_path / 'missing.csv')
+        )
+        current = {'t': 1000.0}
+        monkeypatch.setattr(mcp_server.time, 'monotonic', lambda: current['t'])
+
+        with patch(
+            'app.mcp_server.requests.get',
+            side_effect=[
+                _published_response(),
+                _published_response(text=''),
+            ],
+        ) as mock_get:
+            first = mcp_server.load_dataset()
+            current['t'] = 1000.0 + DATASET_CACHE_TTL_SECONDS + 1
+            second = mcp_server.load_dataset()
+
+        assert mock_get.call_count == 2
+        assert second[0]['repo'] == first[0]['repo']
+        assert mcp_server._published_cache['issues'] == first
+
+    def test_load_dataset_backs_off_after_failed_refetch(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path', lambda: str(tmp_path / 'missing.csv')
+        )
+        current = {'t': 1000.0}
+        monkeypatch.setattr(mcp_server.time, 'monotonic', lambda: current['t'])
+
+        with patch(
+            'app.mcp_server.requests.get',
+            side_effect=[
+                _published_response(),
+                requests.exceptions.ConnectionError('offline'),
+                _published_response(),
+            ],
+        ) as mock_get:
+            first = mcp_server.load_dataset()
+            assert mock_get.call_count == 1
+
+            current['t'] = 1000.0 + DATASET_CACHE_TTL_SECONDS + 1
+            second = mcp_server.load_dataset()
+            assert mock_get.call_count == 2
+            assert second[0]['repo'] == first[0]['repo']
+
+            current['t'] += 10.0
+            third = mcp_server.load_dataset()
+            assert mock_get.call_count == 2
+            assert third[0]['repo'] == first[0]['repo']
+
+            current['t'] += DATASET_FETCH_BACKOFF_SECONDS
+            fourth = mcp_server.load_dataset()
+            assert mock_get.call_count == 3
+            assert fourth[0]['repo'] == first[0]['repo']
 
 
 class TestSearchIssues:
