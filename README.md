@@ -60,7 +60,7 @@ Did the repo helped you finding an issue? learning something? Consider giving it
 
 ---
 
-## Good First Issues <sub><sub>Last run: 2026-09-07</sub></sub>
+## Good First Issues <sub><sub>Last run: 2026-09-08</sub></sub>
 
 | Repo | Language | Title | Comments | Created | Updated |
 |---|---|---|---|---|---|
@@ -78,7 +78,6 @@ Did the repo helped you finding an issue? learning something? Consider giving it
 | microsoft/msquic | C | [2.6.0 : Visual Studio : some warnings as errors](https://github.com/microsoft/msquic/issues/6234) | 8 | 2026-08-14 | 2026-09-04 |
 | microsoft/profile-explorer | C# | [Mapping code gap?](https://github.com/microsoft/profile-explorer/issues/7) | 0 | 2025-02-10 | 2026-03-27 |
 | microsoft/WPF-Samples | C# | [Sample Applications Update to Fluent Theme](https://github.com/microsoft/WPF-Samples/issues/680) | 0 | 2025-02-03 | 2025-02-03 |
-| microsoft/aspire | C# | [[13.5] Capture Paused alignment](https://github.com/microsoft/aspire/issues/19018) | 1 | 2026-08-05 | 2026-08-06 |
 | microsoft/aspire | C# | [Provide CSV export option in dashboard console logs](https://github.com/microsoft/aspire/issues/11121) | 3 | 2025-08-26 | 2026-07-04 |
 | microsoft/mcp | C# | [[COMMUNITY] Auto generate CHANGELOG, including adding contributors for each release](https://github.com/microsoft/mcp/issues/156) | 4 | 2025-09-03 | 2026-08-26 |
 | microsoft/aspire | C# | [[13.5] Logs filter should hide `UTC timestamps` option when `Show timestamps` is disabled](https://github.com/microsoft/aspire/issues/19019) | 5 | 2026-08-05 | 2026-09-04 |
@@ -257,7 +256,6 @@ Did the repo helped you finding an issue? learning something? Consider giving it
 | hashicorp/terraform-provider-kubernetes | Go | [Init container doesn't support restart_policy option (to transform it in a sidecar container)](https://github.com/hashicorp/terraform-provider-kubernetes/issues/2446) | 9 | 2024-03-18 | 2025-11-26 |
 | kubernetes/perf-tests | Go | [clusterloader2 should be covered with unit tests](https://github.com/kubernetes/perf-tests/issues/572) | 10 | 2019-06-18 | 2025-06-04 |
 | hashicorp/waypoint | Go | [Improve error message if docker desktop is not running](https://github.com/hashicorp/waypoint/issues/3471) | 10 | 2022-06-18 | 2023-01-06 |
-| kubernetes/cloud-provider-openstack | Go | [[cinder-csi-plugin] Allow StorageClass parameters to be set in Helm chart](https://github.com/kubernetes/cloud-provider-openstack/issues/1980) | 11 | 2022-08-31 | 2023-10-15 |
 | kubernetes/perf-tests | Go | [Make PV tests work on kubemark clusters](https://github.com/kubernetes/perf-tests/issues/803) | 11 | 2019-09-18 | 2020-08-06 |
 | kubernetes/sig-security | Go | [tooling: run tests and linters with prow for srctl](https://github.com/kubernetes/sig-security/issues/175) | 12 | 2026-02-06 | 2026-08-07 |
 | kubernetes/minikube | Go | [mikube start fail when --memory is lower than 2500M - missing input validation](https://github.com/kubernetes/minikube/issues/23317) | 13 | 2026-07-07 | 2026-08-16 |
@@ -409,6 +407,8 @@ Did the repo helped you finding an issue? learning something? Consider giving it
 | godotengine/godot-asset-library | PHP | [A way to cancel edit requests](https://github.com/godotengine/godot-asset-library/issues/149) | 3 | 2018-06-27 | 2020-05-07 |
 | godotengine/godot-asset-library | PHP | [Sanitize inputs for Asset data/fields, like URLs](https://github.com/godotengine/godot-asset-library/issues/204) | 5 | 2020-03-08 | 2021-11-03 |
 | huggingface/optimum-executorch | Python | [Add benchmarking numbers for more models](https://github.com/huggingface/optimum-executorch/issues/131) | 0 | 2025-09-02 | 2025-09-02 |
+| microsoft/mssql-django | Python | [JSON-null key lookups use OPENJSON, which requires database compatibility level 130 (fails on down-leveled 2016-2019 databases)](https://github.com/microsoft/mssql-django/issues/592) | 0 | 2026-09-08 | 2026-09-08 |
+| microsoft/mssql-django | Python | [JSONField key isnull=True over-matches JSON null values on SQL Server (also causes wrong iexact=None on Django < 6.1)](https://github.com/microsoft/mssql-django/issues/591) | 0 | 2026-09-08 | 2026-09-08 |
 | microsoft/teams-agent-accelerator-libs-py | Python | [Expose the ability to add memory explicitly](https://github.com/microsoft/teams-agent-accelerator-libs-py/issues/57) | 0 | 2024-12-16 | 2025-01-06 |
 | microsoft/BitBLAS | Python | [[Feature Request] Enhance Database to support reload scheduled tilelang operator](https://github.com/microsoft/BitBLAS/issues/269) | 0 | 2024-12-16 | 2024-12-16 |
 | microsoft/BitBLAS | Python | [[Feature Request] Flash Attention Op should be enhanced with our Scheduler Abstraction](https://github.com/microsoft/BitBLAS/issues/264) | 0 | 2024-12-12 | 2024-12-12 |
@@ -508,7 +508,6 @@ Did the repo helped you finding an issue? learning something? Consider giving it
 | microsoft/autogen | Python | [Get current message thread from a group chat team.](https://github.com/microsoft/autogen/issues/6085) | 32 | 2025-03-24 | 2026-09-01 |
 | microsoft/autogen | Python | [open needs encoding='utf-8' for non-english environment, error in playwright_controller.py](https://github.com/microsoft/autogen/issues/5566) | 33 | 2025-02-16 | 2026-08-30 |
 | microsoft/TRELLIS | Python | [How to generate 3D assets with more number of faces?](https://github.com/microsoft/TRELLIS/issues/58) | 34 | 2024-12-12 | 2025-01-25 |
-| microsoft/TRELLIS | Python | [Setting Up Trellis on Windows](https://github.com/microsoft/TRELLIS/issues/3) | 53 | 2024-12-06 | 2025-11-02 |
 | huggingface/peft | Python | [Comparison of Different Fine-Tuning Techniques for Conversational AI](https://github.com/huggingface/peft/issues/2310) | 157 | 2025-01-07 | 2026-09-01 |
 | huggingface/ratchet | Rust | [Reduce dependencies! 🗡️](https://github.com/huggingface/ratchet/issues/170) | 0 | 2024-04-17 | 2024-04-17 |
 | microsoft/openvmm | Rust | [remove usages of futures::select! in the repo with futures_concurrency](https://github.com/microsoft/openvmm/issues/1246) | 0 | 2025-04-25 | 2025-06-21 |
@@ -614,6 +613,7 @@ Did the repo helped you finding an issue? learning something? Consider giving it
 | hashicorp/terraform-cdk | TypeScript | [Support `local-exec` `quiet` attribute](https://github.com/hashicorp/terraform-cdk/issues/2702) | 1 | 2023-03-09 | 2023-06-01 |
 | mattermost/mattermost-test-management | TypeScript | [Display Errors and Files name in which they occurr](https://github.com/mattermost/mattermost-test-management/issues/20) | 1 | 2022-11-23 | 2022-11-24 |
 | freeCodeCamp/chapter | TypeScript | [Updating Different Users section in contribution guide](https://github.com/freeCodeCamp/chapter/issues/1914) | 1 | 2022-11-17 | 2022-11-20 |
+| cncf/prow-github-actions | TypeScript | [[BUG] stop allowing lgtm one's own pr](https://github.com/cncf/prow-github-actions/issues/91) | 1 | 2025-07-04 | 2026-09-08 |
 | decentraland/builder | TypeScript | [Add a search bar to NAMEs list](https://github.com/decentraland/builder/issues/3330) | 1 | 2025-12-26 | 2025-12-27 |
 | decentraland/creator-hub | TypeScript | [Need to click twice on "Create Scene" button to create the scene](https://github.com/decentraland/creator-hub/issues/832) | 1 | 2025-10-16 | 2026-01-22 |
 | decentraland/creator-hub | TypeScript | [Duplicated items appear at the bottom of the list](https://github.com/decentraland/creator-hub/issues/595) | 1 | 2025-05-08 | 2026-02-18 |
@@ -639,6 +639,7 @@ Did the repo helped you finding an issue? learning something? Consider giving it
 | microsoft/teams.ts | TypeScript | [[cards] support lowercase and Capitalized JSON values](https://github.com/microsoft/teams.ts/issues/132) | 3 | 2025-04-09 | 2025-10-11 |
 | hashicorp/terraform-cdk | TypeScript | [Support kubernetes backend](https://github.com/hashicorp/terraform-cdk/issues/1628) | 3 | 2022-03-19 | 2023-06-01 |
 | hashicorp/terraform-cdk | TypeScript | [API docs: Add docs to Terraform backends](https://github.com/hashicorp/terraform-cdk/issues/1268) | 3 | 2021-11-08 | 2023-06-28 |
+| cncf/prow-github-actions | TypeScript | [[Feature] Surface org membership errors](https://github.com/cncf/prow-github-actions/issues/39) | 3 | 2021-12-29 | 2026-09-08 |
 | huggingface/chat-ui | TypeScript | [Add option for users to customize search engines in settings page](https://github.com/huggingface/chat-ui/issues/1756) | 4 | 2025-03-15 | 2026-05-09 |
 | huggingface/chat-ui | TypeScript | [Chrome app icon on macOS](https://github.com/huggingface/chat-ui/issues/1439) | 4 | 2024-08-27 | 2026-05-07 |
 | huggingface/chat-ui | TypeScript | [System prompt not taken into account when web browsing.](https://github.com/huggingface/chat-ui/issues/1159) | 4 | 2024-05-22 | 2026-06-26 |
