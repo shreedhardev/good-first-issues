@@ -1,14 +1,20 @@
 import asyncio
 import sys
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from datetime import date, timedelta
 
 import pytest
+import requests
 
 from mcp.server.mcpserver import MCPServer
 
-
 from app import mcp_server
+from app.core.config import (
+    DATASET_CACHE_TTL_SECONDS,
+    DATASET_FETCH_BACKOFF_SECONDS,
+    PUBLISHED_DATASET_URL,
+)
+from app.core.custom_exceptions import DatasetError
 
 
 CSV_HEADER = 'repo,language,title,url,comments,labels,created_at,updated_at\n'
@@ -29,6 +35,28 @@ def dataset_env(tmp_path, monkeypatch):
     return str(csv_file)
 
 
+@pytest.fixture(autouse=True)
+def reset_published_cache():
+    mcp_server._published_cache['issues'] = None
+    mcp_server._published_cache['fetched_at'] = 0.0
+    mcp_server._published_cache['failed_at'] = 0.0
+    mcp_server._dataset_meta['source'] = None
+    mcp_server._dataset_meta['location'] = None
+    yield
+    mcp_server._published_cache['issues'] = None
+    mcp_server._published_cache['fetched_at'] = 0.0
+    mcp_server._published_cache['failed_at'] = 0.0
+    mcp_server._dataset_meta['source'] = None
+    mcp_server._dataset_meta['location'] = None
+
+
+def _published_response(text=None):
+    response = MagicMock()
+    response.text = text if text is not None else CSV_HEADER + CSV_ROWS
+    response.raise_for_status.return_value = None
+    return response
+
+
 class TestLoadDataset:
 
     def test_load_dataset_reads_the_configured_file(self, dataset_env):
@@ -36,6 +64,273 @@ class TestLoadDataset:
 
         assert len(result) == 2
         assert result[0]['repo'] == 'owner/alpha'
+        assert 'dataset_source' not in result[0]
+
+    def test_load_dataset_does_not_fetch_when_issues_csv_is_missing(
+        self, tmp_path, monkeypatch
+    ):
+        missing = tmp_path / 'nope.csv'
+        monkeypatch.setenv('ISSUES_CSV', str(missing))
+
+        with patch('app.mcp_server.requests.get') as mock_get:
+            with pytest.raises(DatasetError):
+                mcp_server.load_dataset()
+
+        mock_get.assert_not_called()
+
+    def test_load_dataset_reads_the_local_file_when_env_is_unset(
+        self, tmp_path, monkeypatch
+    ):
+        csv_file = tmp_path / 'good_first_issues.csv'
+        csv_file.write_text(CSV_HEADER + CSV_ROWS, encoding='utf-8')
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(mcp_server, 'get_dataset_path', lambda: str(csv_file))
+
+        with patch('app.mcp_server.requests.get') as mock_get:
+            result = mcp_server.load_dataset()
+
+        mock_get.assert_not_called()
+        assert result[0]['repo'] == 'owner/alpha'
+
+    def test_load_dataset_fetches_the_published_file_when_nothing_local(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path', lambda: str(tmp_path / 'missing.csv')
+        )
+
+        with patch(
+            'app.mcp_server.requests.get', return_value=_published_response()
+        ) as mock_get:
+            result = mcp_server.load_dataset()
+
+        mock_get.assert_called_once_with(
+            PUBLISHED_DATASET_URL,
+            timeout=mcp_server.DATASET_FETCH_TIMEOUT,
+        )
+        assert len(result) == 2
+        assert result[0]['repo'] == 'owner/alpha'
+
+    def test_load_dataset_reuses_the_published_cache(self, tmp_path, monkeypatch):
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path', lambda: str(tmp_path / 'missing.csv')
+        )
+        monkeypatch.setattr(mcp_server.time, 'monotonic', lambda: 1000.0)
+
+        with patch(
+            'app.mcp_server.requests.get', return_value=_published_response()
+        ) as mock_get:
+            first = mcp_server.load_dataset()
+            second = mcp_server.load_dataset()
+
+        assert mock_get.call_count == 1
+        assert first == second
+
+    def test_load_dataset_refetches_when_the_cache_expires(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path', lambda: str(tmp_path / 'missing.csv')
+        )
+        current = {'t': 1000.0}
+        monkeypatch.setattr(mcp_server.time, 'monotonic', lambda: current['t'])
+
+        with patch(
+            'app.mcp_server.requests.get', return_value=_published_response()
+        ) as mock_get:
+            mcp_server.load_dataset()
+            current['t'] = 1000.0 + DATASET_CACHE_TTL_SECONDS + 1
+            mcp_server.load_dataset()
+
+        assert mock_get.call_count == 2
+
+    def test_load_dataset_uses_stale_cache_when_a_refetch_fails(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path', lambda: str(tmp_path / 'missing.csv')
+        )
+        current = {'t': 1000.0}
+        monkeypatch.setattr(mcp_server.time, 'monotonic', lambda: current['t'])
+
+        with patch(
+            'app.mcp_server.requests.get',
+            side_effect=[
+                _published_response(),
+                requests.exceptions.ConnectionError('offline'),
+            ],
+        ) as mock_get:
+            first = mcp_server.load_dataset()
+            current['t'] = 1000.0 + DATASET_CACHE_TTL_SECONDS + 1
+            second = mcp_server.load_dataset()
+
+        assert mock_get.call_count == 2
+        assert second[0]['repo'] == first[0]['repo']
+
+    def test_load_dataset_errors_when_the_published_fetch_fails(
+        self, tmp_path, monkeypatch
+    ):
+        missing = tmp_path / 'missing.csv'
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(mcp_server, 'get_dataset_path', lambda: str(missing))
+
+        with patch(
+            'app.mcp_server.requests.get',
+            side_effect=requests.exceptions.Timeout('timed out'),
+        ):
+            with pytest.raises(DatasetError) as excinfo:
+                mcp_server.load_dataset()
+
+        message = str(excinfo.value)
+        assert str(missing) in message
+        assert PUBLISHED_DATASET_URL in message
+        assert 'timed out' in message
+
+    def test_load_dataset_errors_on_an_http_failure(self, tmp_path, monkeypatch):
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path', lambda: str(tmp_path / 'missing.csv')
+        )
+        response = MagicMock()
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            '404'
+        )
+
+        with patch('app.mcp_server.requests.get', return_value=response):
+            with pytest.raises(DatasetError) as excinfo:
+                mcp_server.load_dataset()
+
+        assert '404' in str(excinfo.value)
+
+    def test_load_dataset_errors_on_empty_body(self, tmp_path, monkeypatch):
+        missing = tmp_path / 'missing.csv'
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(mcp_server, 'get_dataset_path', lambda: str(missing))
+
+        with patch(
+            'app.mcp_server.requests.get',
+            return_value=_published_response(text=''),
+        ):
+            with pytest.raises(DatasetError) as excinfo:
+                mcp_server.load_dataset()
+
+        message = str(excinfo.value)
+        assert str(missing) in message
+        assert PUBLISHED_DATASET_URL in message
+        assert 'empty' in message
+
+    def test_load_dataset_errors_on_malformed_html_body(
+        self, tmp_path, monkeypatch
+    ):
+        missing = tmp_path / 'missing.csv'
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(mcp_server, 'get_dataset_path', lambda: str(missing))
+
+        with patch(
+            'app.mcp_server.requests.get',
+            return_value=_published_response(
+                text='<!DOCTYPE html>\n<html>\n<body>Not Found</body>\n</html>'
+            ),
+        ):
+            with pytest.raises(DatasetError) as excinfo:
+                mcp_server.load_dataset()
+
+        message = str(excinfo.value)
+        assert str(missing) in message
+        assert PUBLISHED_DATASET_URL in message
+        assert 'malformed' in message
+
+    def test_load_dataset_uses_stale_cache_on_malformed_refetch(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path', lambda: str(tmp_path / 'missing.csv')
+        )
+        current = {'t': 1000.0}
+        monkeypatch.setattr(mcp_server.time, 'monotonic', lambda: current['t'])
+
+        with patch(
+            'app.mcp_server.requests.get',
+            side_effect=[
+                _published_response(),
+                _published_response(
+                    text='<!DOCTYPE html>\n<html>\n404 Not Found\n</html>'
+                ),
+            ],
+        ) as mock_get:
+            first = mcp_server.load_dataset()
+            current['t'] = 1000.0 + DATASET_CACHE_TTL_SECONDS + 1
+            second = mcp_server.load_dataset()
+
+        assert mock_get.call_count == 2
+        assert second[0]['repo'] == first[0]['repo']
+        assert mcp_server._published_cache['issues'] == first
+
+    def test_load_dataset_uses_stale_cache_on_empty_refetch(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path', lambda: str(tmp_path / 'missing.csv')
+        )
+        current = {'t': 1000.0}
+        monkeypatch.setattr(mcp_server.time, 'monotonic', lambda: current['t'])
+
+        with patch(
+            'app.mcp_server.requests.get',
+            side_effect=[
+                _published_response(),
+                _published_response(text=''),
+            ],
+        ) as mock_get:
+            first = mcp_server.load_dataset()
+            current['t'] = 1000.0 + DATASET_CACHE_TTL_SECONDS + 1
+            second = mcp_server.load_dataset()
+
+        assert mock_get.call_count == 2
+        assert second[0]['repo'] == first[0]['repo']
+        assert mcp_server._published_cache['issues'] == first
+
+    def test_load_dataset_backs_off_after_failed_refetch(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path', lambda: str(tmp_path / 'missing.csv')
+        )
+        current = {'t': 1000.0}
+        monkeypatch.setattr(mcp_server.time, 'monotonic', lambda: current['t'])
+
+        with patch(
+            'app.mcp_server.requests.get',
+            side_effect=[
+                _published_response(),
+                requests.exceptions.ConnectionError('offline'),
+                _published_response(),
+            ],
+        ) as mock_get:
+            first = mcp_server.load_dataset()
+            assert mock_get.call_count == 1
+
+            current['t'] = 1000.0 + DATASET_CACHE_TTL_SECONDS + 1
+            second = mcp_server.load_dataset()
+            assert mock_get.call_count == 2
+            assert second[0]['repo'] == first[0]['repo']
+
+            current['t'] += 10.0
+            third = mcp_server.load_dataset()
+            assert mock_get.call_count == 2
+            assert third[0]['repo'] == first[0]['repo']
+
+            current['t'] += DATASET_FETCH_BACKOFF_SECONDS
+            fourth = mcp_server.load_dataset()
+            assert mock_get.call_count == 3
+            assert fourth[0]['repo'] == first[0]['repo']
 
 
 class TestSearchIssues:
@@ -111,7 +406,10 @@ class TestToolRegistration:
         tools = asyncio.run(mcp_server.mcp.list_tools())
 
         names = {tool.name for tool in tools}
-        assert names == {'search_issues', 'list_languages', 'list_repositories'}
+        assert names == {
+            'search_issues', 'list_languages', 'list_repositories',
+            'dataset_info',
+        }
 
     def test_every_tool_is_described_for_the_model(self):
         tools = asyncio.run(mcp_server.mcp.list_tools())
@@ -125,6 +423,44 @@ class TestToolRegistration:
         assert set(search.input_schema['properties']) == {
             'language', 'max_comments', 'label', 'repo', 'limit', 'max_age_days',
         }
+
+
+class TestDatasetInfo:
+
+    def test_dataset_info_reports_issues_csv(self, dataset_env):
+        info = mcp_server.dataset_info()
+
+        assert info['source'] == 'ISSUES_CSV'
+        assert info['location'] == dataset_env
+
+    def test_dataset_info_reports_local(self, tmp_path, monkeypatch):
+        csv_file = tmp_path / 'good_first_issues.csv'
+        csv_file.write_text(CSV_HEADER + CSV_ROWS, encoding='utf-8')
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path', lambda: str(csv_file)
+        )
+
+        info = mcp_server.dataset_info()
+
+        assert info['source'] == 'local'
+        assert info['location'] == str(csv_file)
+
+    def test_dataset_info_reports_published(self, tmp_path, monkeypatch):
+        monkeypatch.delenv('ISSUES_CSV', raising=False)
+        monkeypatch.setattr(
+            mcp_server, 'get_dataset_path',
+            lambda: str(tmp_path / 'missing.csv'),
+        )
+
+        with patch(
+            'app.mcp_server.requests.get',
+            return_value=_published_response(),
+        ):
+            info = mcp_server.dataset_info()
+
+        assert info['source'] == 'published'
+        assert info['location'] == PUBLISHED_DATASET_URL
 
 
 def test_mcp_server_main_block(monkeypatch):

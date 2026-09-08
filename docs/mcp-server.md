@@ -4,9 +4,15 @@ The project ships an [MCP](https://modelcontextprotocol.io) server, so an AI
 assistant can query the issues dataset directly instead of you reading the
 table by hand.
 
-It reads the dataset **the pipeline last wrote on this machine**, so it answers
-with the usernames this checkout is configured for, not with the ones in the
-upstream repository.
+It reads the dataset in this order: `ISSUES_CSV` if that is set, then
+`good_first_issues.csv` at the project root if that file is present, then
+the [published copy](https://raw.githubusercontent.com/drkrillo/good-first-issues/main/good_first_issues.csv)
+the daily action writes to `main`. A checkout that already has a local CSV
+keeps using it. Somebody who has neither still gets the curated list instead
+of an error.
+
+Call `dataset_info` to see which copy answered (`ISSUES_CSV`, `local`, or
+`published`) and its file path or URL.
 
 ## Prerequisites
 
@@ -18,14 +24,17 @@ does not pull it for nothing:
 pip install -r requirements-mcp.txt
 ```
 
-Then generate a dataset:
+A local dataset is optional. If you want the server to follow the usernames
+this checkout is configured for, generate one:
 
 ```bash
 python -m app.update_issues --output good_first_issues.csv
 ```
 
-The server reads `good_first_issues.csv` at the root of the project. Point it
-somewhere else with the `ISSUES_CSV` environment variable.
+Otherwise it fetches the published CSV (cached for an hour, ten second
+timeout, with a 5-minute backoff on failed refetches). Point it at a
+specific file with the `ISSUES_CSV` environment variable.
+
 
 ## Running it
 
@@ -66,6 +75,7 @@ dependencies into, otherwise the server starts without them.
 | `search_issues` | `language`, `max_comments`, `label`, `repo`, `limit`, `max_age_days` | Matching issues, least discussed first |
 | `list_languages` | — | Languages in the dataset, with issue counts |
 | `list_repositories` | `language` | Repositories in the dataset, with issue counts |
+| `dataset_info` | — | Which dataset the other tools are reading |
 
 All arguments are optional.
 

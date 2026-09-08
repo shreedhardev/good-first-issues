@@ -1,5 +1,6 @@
 import ast
 import csv
+import io
 
 from app.core.custom_exceptions import DatasetError
 from datetime import date, timedelta
@@ -30,32 +31,43 @@ class DatasetManager:
         return [label.strip() for label in raw_labels.split(';') if label.strip()]
 
     @staticmethod
+    def _issues_from_reader(reader):
+        issues = []
+        for row in reader:
+            issues.append({
+                'repo': row['repo'],
+                'language': row['language'],
+                'title': row['title'],
+                'url': row['url'],
+                'comments': int(row['comments']),
+                'labels': DatasetManager.parse_labels(row.get('labels', '')),
+                'created_at': row.get('created_at', ''),
+                'updated_at': row.get('updated_at', ''),
+            })
+        return issues
+
+    @staticmethod
     def load_issues(csv_path):
         """
         Takes the path of the dataset written by the pipeline and returns
         its issues, with the comment count as an int and the labels as a list.
         """
-        issues = []
         try:
             with open(csv_path, newline='', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-
-                for row in reader:
-                    issues.append({
-                        'repo': row['repo'],
-                        'language': row['language'],
-                        'title': row['title'],
-                        'url': row['url'],
-                        'comments': int(row['comments']),
-                        'labels': DatasetManager.parse_labels(row.get('labels', '')),
-                        'created_at': row.get('created_at', ''),
-                        'updated_at': row.get('updated_at', ''),
-                    })
+                return DatasetManager._issues_from_reader(csv.DictReader(f))
         except FileNotFoundError as error:
             logging.error(error)
             raise DatasetError(csv_path) from error
 
-        return issues
+    @staticmethod
+    def load_issues_from_text(csv_text):
+        """
+        Takes the CSV contents as text and returns the same issue dicts
+        as load_issues.
+        """
+        return DatasetManager._issues_from_reader(
+            csv.DictReader(io.StringIO(csv_text))
+        )
 
     @staticmethod
     def filter_issues(issues, language=None, max_comments=None,

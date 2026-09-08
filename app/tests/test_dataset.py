@@ -77,6 +77,15 @@ class TestLoadIssues:
         with pytest.raises(DatasetError):
             DatasetManager.load_issues(missing)
 
+    def test_load_issues_from_text_matches_load_issues(self, dataset_file):
+        with open(dataset_file, encoding='utf-8') as f:
+            csv_text = f.read()
+
+        from_text = DatasetManager.load_issues_from_text(csv_text)
+        from_file = DatasetManager.load_issues(dataset_file)
+
+        assert from_text == from_file
+
 
 class TestFilterIssues:
 
@@ -202,6 +211,15 @@ class TestDatasetError:
         error = DatasetError('/tmp/missing.csv')
 
         assert '/tmp/missing.csv' in str(error)
+
+    def test_dataset_error_uses_the_fetch_reason(self):
+        error = DatasetError(
+            'https://example.com/issues.csv',
+            reason='no local dataset, and fetching failed: timed out',
+        )
+
+        assert 'timed out' in str(error)
+        assert error.reason == 'no local dataset, and fetching failed: timed out'
 
 
 class TestConfig:
